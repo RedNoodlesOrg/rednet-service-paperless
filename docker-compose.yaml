@@ -1,7 +1,68 @@
-name: "PLACEHOLDER"
+name: "paperless-stack"
 services:
-
+  broker:
+    image: docker.io/library/redis:7
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+  db:
+    image: docker.io/library/postgres:16
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+      - broker
+      - gotenberg
+      - tika
+    networks:
+      default: null
+      cloudflared-network: null
+    volumes:
+      - data:/usr/src/paperless/data
+      - media:/usr/src/paperless/media
+      - ./export:/usr/src/paperless/export
+      - ./consume:/usr/src/paperless/consume
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_TIKA_ENABLED: 1
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_OCR_LANGUAGE: deu
+      PAPERLESS_TIME_ZONE: Europe/Zurich
+      PAPERLESS_URL: $PAPERLESS_URL
+      PAPERLESS_CONSUMER_POLLING: 60
+      PAPERLESS_CONSUMER_ENABLE_BARCODES: true
+      PAPERLESS_CONSUMER_ENABLE_ASN_BARCODE: true
+      PAPERLESS_CONSUMER_BARCODE_SCANNER: ZXING
+      PAPERLESS_SECRET_KEY: $PAPERLESS_SECRET_KEY
+      PAPERLESS_ENABLE_HTTP_REMOTE_USER: true
+      PAPERLESS_HTTP_REMOTE_USER_HEADER_NAME: HTTP_CF_ACCESS_AUTHENTICATED_USER_EMAIL
+      PAPERLESS_DISABLE_REGULAR_LOGIN: true
+  gotenberg:
+    image: docker.io/gotenberg/gotenberg:8.7
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+  tika:
+    image: docker.io/apache/tika:latest
+    restart: unless-stopped
+volumes:
+  data:
+  media:
+  pgdata:
+  redisdata:
 networks:
-  erebos-net:
-    name: erebos-net
+  cloudflared-network:
+    name: cloudflared-network
     external: true
